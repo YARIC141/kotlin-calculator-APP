@@ -1,5 +1,6 @@
 package com.example.calculator.controller;
 
+import com.example.calculator.model.CalculationHistory;
 import com.example.calculator.model.CalculationRequest;
 import com.example.calculator.model.CalculationResponse;
 import com.example.calculator.service.CalculatorService;
@@ -10,34 +11,22 @@ import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * REST контроллер для обработки запросов калькулятора
- * Предоставляет endpoint для вычисления математических выражений
- * Обрабатывает CORS запросы от клиентских приложений
- */
+import java.util.List;
+
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*") // Разрешаем запросы с любого origin для разработки
+@CrossOrigin(origins = "*")
 public class CalculatorController {
 
     private static final Logger logger = LoggerFactory.getLogger(CalculatorController.class);
     
     private final CalculatorService calculatorService;
 
-    /**
-     * Конструктор с внедрением зависимости сервиса
-     * @param calculatorService сервис для вычислений
-     */
     @Autowired
     public CalculatorController(CalculatorService calculatorService) {
         this.calculatorService = calculatorService;
     }
 
-    /**
-     * POST endpoint для вычисления математических выражений
-     * @param request запрос с выражением для вычисления
-     * @return ResponseEntity с результатом вычисления
-     */
     @PostMapping("/calculate")
     public ResponseEntity<CalculationResponse> calculate(@RequestBody CalculationRequest request) {
         logger.info("Received calculation request: {}", request.getExpression());
@@ -48,10 +37,28 @@ public class CalculatorController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * GET endpoint для проверки работы сервера
-     * @return простое сообщение о статусе сервера
-     */
+    @GetMapping("/history")
+    public ResponseEntity<List<CalculationResponse>> getHistory() {
+        logger.info("Requesting calculation history");
+        List<CalculationResponse> history = calculatorService.getCalculationHistory();
+        logger.info("Returning {} history entries", history.size());
+        return ResponseEntity.ok(history);
+    }
+
+    @GetMapping("/history/successful")
+    public ResponseEntity<List<CalculationResponse>> getSuccessfulHistory() {
+        logger.info("Requesting successful calculation history");
+        List<CalculationResponse> history = calculatorService.getSuccessfulCalculations();
+        return ResponseEntity.ok(history);
+    }
+
+    @GetMapping("/history/failed")
+    public ResponseEntity<List<CalculationResponse>> getFailedHistory() {
+        logger.info("Requesting failed calculation history");
+        List<CalculationResponse> history = calculatorService.getFailedCalculations();
+        return ResponseEntity.ok(history);
+    }
+
     @GetMapping("/health")
     public ResponseEntity<String> healthCheck() {
         logger.info("Health check requested");

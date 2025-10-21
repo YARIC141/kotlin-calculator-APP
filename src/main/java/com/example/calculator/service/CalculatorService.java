@@ -1,39 +1,113 @@
 package com.example.calculator.service;
 
+import com.example.calculator.model.CalculationHistory;
 import com.example.calculator.model.CalculationResponse;
+import com.example.calculator.repository.CalculationHistoryRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class CalculatorService {
 
+    private final CalculationHistoryRepository historyRepository;
+
+    @Autowired
+    public CalculatorService(CalculationHistoryRepository historyRepository) {
+        this.historyRepository = historyRepository;
+    }
+
     public CalculationResponse calculate(String expression) {
         try {
             if (expression == null || expression.trim().isEmpty()) {
-                return new CalculationResponse(expression, "Expression cannot be empty");
+                return saveErrorToDatabase(expression, "Expression cannot be empty");
             }
 
             String normalized = expression.replace('×', '*').replace('÷', '/').replaceAll("\\s+", "");
             
-            // Используем улучшенный калькулятор с приоритетом операций
             double result = evaluateWithPriority(normalized);
-            return new CalculationResponse(result, expression, "Calculation successful");
+            return saveSuccessToDatabase(expression, result);
 
         } catch (ArithmeticException e) {
-            return new CalculationResponse(expression, "Arithmetic error: " + e.getMessage());
+            return saveErrorToDatabase(expression, "Arithmetic error: " + e.getMessage());
         } catch (Exception e) {
-            return new CalculationResponse(expression, "Calculation error: " + e.getMessage());
+            return saveErrorToDatabase(expression, "Calculation error: " + e.getMessage());
         }
     }
 
+    private CalculationResponse saveSuccessToDatabase(String expression, double result) {
+        CalculationHistory history = new CalculationHistory(expression, result, true, null);
+        historyRepository.save(history);
+        return createSuccessResponse(expression, result);
+    }
+
+    private CalculationResponse saveErrorToDatabase(String expression, String errorMessage) {
+        CalculationHistory history = new CalculationHistory(expression, null, false, errorMessage);
+        historyRepository.save(history);
+        return createErrorResponse(expression, errorMessage);
+    }
+
+    public List<CalculationResponse> getCalculationHistory() {
+        List<CalculationHistory> historyList = historyRepository.findAllByOrderByCreatedAtDesc();
+        return convertToResponseList(historyList);
+    }
+
+    public List<CalculationResponse> getSuccessfulCalculations() {
+        List<CalculationHistory> historyList = historyRepository.findBySuccessTrueOrderByCreatedAtDesc();
+        return convertToResponseList(historyList);
+    }
+
+    public List<CalculationResponse> getFailedCalculations() {
+        List<CalculationHistory> historyList = historyRepository.findBySuccessFalseOrderByCreatedAtDesc();
+        return convertToResponseList(historyList);
+    }
+
+    private List<CalculationResponse> convertToResponseList(List<CalculationHistory> historyList) {
+        List<CalculationResponse> responses = new ArrayList<>();
+        for (CalculationHistory history : historyList) {
+            responses.add(convertToResponse(history));
+        }
+        return responses;
+    }
+
+    private CalculationResponse convertToResponse(CalculationHistory history) {
+        CalculationResponse response = new CalculationResponse();
+        response.setExpression(history.getExpression());
+        response.setResult(history.getResult());
+        
+        if (history.getSuccess()) {
+            response.setMessage("Calculation successful");
+        } else {
+            response.setMessage(history.getErrorMessage());
+        }
+        
+        return response;
+    }
+
+    private CalculationResponse createSuccessResponse(String expression, Double result) {
+        CalculationResponse response = new CalculationResponse();
+        response.setExpression(expression);
+        response.setResult(result);
+        response.setMessage("Calculation successful");
+        return response;
+    }
+
+    private CalculationResponse createErrorResponse(String expression, String message) {
+        CalculationResponse response = new CalculationResponse();
+        response.setExpression(expression);
+        response.setResult(null);
+        response.setMessage(message);
+        return response;
+    }
+
     private double evaluateWithPriority(String expr) {
-        // Сначала обрабатываем умножение и деление
         expr = processMultiplicationAndDivision(expr);
-        // Затем сложение и вычитание
         return processAdditionAndSubtraction(expr);
     }
 
     private String processMultiplicationAndDivision(String expr) {
-        // Регулярное выражение для поиска чисел и операторов * /
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(\\d+\\.?\\d*)([*/])(\\d+\\.?\\d*)");
         java.util.regex.Matcher matcher = pattern.matcher(expr);
         
@@ -50,7 +124,6 @@ public class CalculatorService {
                 result = left / right;
             }
             
-            // Заменяем выражение на результат
             expr = expr.substring(0, matcher.start()) + result + expr.substring(matcher.end());
             matcher = pattern.matcher(expr);
         }
@@ -59,7 +132,6 @@ public class CalculatorService {
     }
 
     private double processAdditionAndSubtraction(String expr) {
-        // Регулярное выражение для сложения и вычитания
         String[] parts = expr.split("(?=[+-])|(?<=[+-])");
         double result = Double.parseDouble(parts[0]);
         
